@@ -3,11 +3,14 @@ import { prisma } from '@/lib/prisma';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Next.js 16 async params
+    const { id } = await context.params;
+
     const reservation = await prisma.reservation.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!reservation) {
@@ -31,7 +34,7 @@ export async function POST(
       );
     }
 
-    // Confirm reservation - permanently deduct stock
+    // Confirm reservation and deduct stock
     await prisma.$transaction(async (tx) => {
       await tx.stockLevel.update({
         where: {
@@ -51,14 +54,19 @@ export async function POST(
       });
 
       await tx.reservation.update({
-        where: { id: params.id },
-        data: { status: 'CONFIRMED' },
+        where: { id },
+        data: {
+          status: 'CONFIRMED',
+        },
       });
     });
 
-    return NextResponse.json({ message: 'Reservation confirmed' });
+    return NextResponse.json({
+      message: 'Reservation confirmed',
+    });
   } catch (error) {
     console.error('Confirm error:', error);
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
